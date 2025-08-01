@@ -1,0 +1,104 @@
+service: family-forest
+
+provider:
+  name: aws
+  runtime: python3.11
+  region: us-west-2
+  versionFunctions: true
+  deploymentBucket:
+    versioning: true
+    maxPreviousDeploymentArtifacts: 2
+  environment:
+    POWERTOOLS_SERVICE_NAME: ${self:service}
+    TELEGRAM_BOT_TOKEN: ${ssm:/family-forest/telegram-token}
+    ADMIN_USER_IDS: ${ssm:/family-forest/admin-users}
+    STAGE: ${sls:stage}
+    FAMILY_FOREST_TABLE_NAME: !Ref FamilyForestTable
+  apiGateway:
+    apiKeys:
+      - name: familyForestApiKey
+        description: API key for Family Forest webhook
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - dynamodb:*
+          Resource: !GetAtt FamilyForestTable.Arn
+        - Effect: Allow
+          Action:
+            - ssm:GetParameter
+          Resource: arn:aws:ssm:${aws:region}:${aws:accountId}:parameter/family-forest/*
+
+plugins:
+  - serverless-python-requirements
+  - serverless-prune-plugin
+
+custom:
+  prune:
+    automatic: true
+    number: 2
+  pythonRequirements:
+    layer:
+      name: family-forest-dependencies
+      description: Python dependencies for Family Forest
+      compatibleRuntimes:
+        - python3.11
+    noDeploy:
+      - pytest
+      - pytest-cov
+      - pytest-mock
+      - mypy
+      - black
+      - isort
+      - pylint
+      - types-boto3
+      - types-requests
+    dockerizePip: true
+    slim: true
+    strip: false
+
+package:
+  patterns:
+    - '!.env'
+    - '!.venv/**'
+    - '!tests/**'
+    - '!__pycache__/**'
+    - '!.pytest_cache/**'
+    - '!.mypy_cache/**'
+
+functions:
+  telegram:
+    handler: src.handlers.telegram.handler.handler
+    layers:
+      - { Ref: PythonRequirementsLambdaLayer }
+    events:
+      - http:
+          path: /webhook
+          method: post
+          cors: true
+          private: false
+    timeout: 29
+    memorySize: 256
+
+resources:
+  Resources:
+    FamilyForestTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: PK
+            AttributeType: S
+          - AttributeName: SK
+            AttributeType: S
+        KeySchema:
+          - AttributeName: PK
+            KeyType: HASH
+          - AttributeName: SK
+            KeyType: RANGE
+        Tags:
+          - Key: Service
+            Value: ${self:service}
+          - Key: Environment
+            Value: ${sls:stage}

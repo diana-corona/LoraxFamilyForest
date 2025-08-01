@@ -1,0 +1,12 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "family-forest"
+version = "0.1.0"
+description = "Family Forest - A Telegram-based family tree management system"
+requires-python = ">=3.11"
+
+[tool.setuptools]
+packages = ["src"]
